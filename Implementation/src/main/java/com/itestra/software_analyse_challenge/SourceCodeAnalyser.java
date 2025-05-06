@@ -2,7 +2,7 @@ package com.itestra.software_analyse_challenge;
 
 import org.apache.commons.cli.*;
 
-import java.io.File;
+import java.io.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -15,13 +15,65 @@ public class SourceCodeAnalyser {
      * @return mapping from filename -> {@link Output} object.
      */
     public static Map<String, Output> analyse(Input input) {
-        // TODO insert your Code here.
+        List<File> files = getFilesInDirectory(input.getInputDirectory());
 
         // For each file put one Output object to your result map.
+        Map<String, Output> output = new HashMap<>(files.size());
+        for (File file : files) {
+            output.put(file.getName(), new Output(analyseSLOC(file), null));
+        }
+
         // You can extend the Output object using the functions lineNumberBonus(int), if you did
         // the bonus exercise.
 
-        return Collections.emptyMap();
+        return output;
+    }
+
+    /**
+     * 1. Analyze the number of source lines
+     * @param file File to analyse
+     * @return Line number of the given file
+     */
+    private static int analyseSLOC(File file) {
+        if (file.canRead()) {
+            int lineNumber = 0;
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    // "lines containing comments" --> Line which is only a comment
+                    if (!line.isEmpty() && !line.startsWith("//")) {
+                        ++lineNumber;
+                    }
+                }
+            } catch (FileNotFoundException e) {
+                // The given Output type does not consider the case of "No analyse possible".
+                return -37;
+            } catch (IOException e) {
+                // The given Output type does not consider the case of "No analyse possible".
+                return -73;
+            }
+            return lineNumber;
+        } else {
+            // The given Output type does not consider the case of "No analyse possible".
+            return -42;
+        }
+    }
+
+    /**
+     * Returns all files in a directory and recursively its subdirectories.
+     * @param directory The directory to look at
+     * @return The List of Files found (without directories)
+     */
+    private static List<File> getFilesInDirectory(File directory) {
+        return Arrays.stream(Objects.requireNonNull(directory.listFiles()))
+            .<File>mapMulti((f, c) -> {
+                if (f.isDirectory()) {
+                    getFilesInDirectory(f).forEach(c);
+                } else {
+                    c.accept(f);
+                }
+            }).toList();
     }
 
 
