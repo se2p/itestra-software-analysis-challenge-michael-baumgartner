@@ -77,7 +77,7 @@ public class SourceCodeAnalyser {
     }
 
 
-    /**
+    /*
      * INPUT - OUTPUT
      *
      * No changes below here are necessary!
@@ -113,7 +113,7 @@ public class SourceCodeAnalyser {
                         .map(e -> new OutputLine(e.getKey(), e.getValue().getLineNumber(), e.getValue().getLineNumberBonus(), e.getValue().getDependencies()))
                         .sorted(Comparator.comparing(OutputLine::getFileName))
                         .collect(Collectors.toList());
-        outputLines.add(0, new OutputLine("File", "Source Lines", "Source Lines without Getters and Block Comments", "Dependencies"));
+        outputLines.addFirst(new OutputLine("File", "Source Lines", "Source Lines without Getters and Block Comments", "Dependencies"));
         int maxDirectoryName = outputLines.stream().map(OutputLine::getFileName).mapToInt(String::length).max().orElse(100);
         int maxLineNumber = outputLines.stream().map(OutputLine::getLineNumber).mapToInt(String::length).max().orElse(100);
         int maxLineNumberWithoutGetterAndSetter = outputLines.stream().map(OutputLine::getLineNumberWithoutGetterSetter).mapToInt(String::length).max().orElse(100);
