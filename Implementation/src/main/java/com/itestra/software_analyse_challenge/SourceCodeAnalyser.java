@@ -4,6 +4,8 @@ import org.apache.commons.cli.*;
 
 import java.io.*;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class SourceCodeAnalyser {
@@ -17,10 +19,55 @@ public class SourceCodeAnalyser {
     public static Map<String, Output> analyse(Input input) {
         List<File> files = getFilesInDirectory(input.getInputDirectory());
 
+        /*
+         * Assumption: Directory is always the java source directory
+         * where the first level of subdirectories are the projects / root packages to consider.
+         */
+        List<String> rootPackages = Arrays.stream(Objects.requireNonNull(
+                    input.getInputDirectory().listFiles(File::isDirectory)
+                )).map(File::getName).toList();
+
+        Map<File, List<String>> imports = new HashMap<>(files.size());
+        Map<File, Set<String>> directDependencies = new HashMap<>(files.size());
+        Map<File, Set<String>> indirectDependencies = new HashMap<>(files.size());
+        Map<File, List<File>> dependents = new HashMap<>(files.size());
+        for (File file: files) {
+            indirectDependencies.put(file, new HashSet<>(rootPackages.size()));
+            dependents.put(file, new LinkedList<>());
+        }
+        for (File file : files) {
+            imports.put(file, getFileImports(file));
+            /*
+             * Assumption: Directory is always the java source directory
+             * where the first level of subdirectories are the projects / root packages to consider.
+             */
+            List<String> otherRootPackages = rootPackages.stream()
+                    .filter(p -> !file.getPath().startsWith(input.getInputDirectory()
+                            + File.separator + p.replaceAll("\\.", File.separator)))
+                    .toList();
+            directDependencies.put(file, analyseDirectDependencies(imports.get(file), otherRootPackages));
+            imports.get(file).forEach(imported -> {
+                File dependency = new File(input.getInputDirectory() + File.separator
+                        + imported.replaceAll("\\.", File.separator) + ".java");
+                if (dependents.containsKey(dependency)) {
+                    dependents.get(dependency).add(file);
+                }
+            });
+        }
+        for (File file : files) {
+            if (!directDependencies.get(file).isEmpty()) {
+                addDependenciesToDependents(file, indirectDependencies, directDependencies, dependents);
+            }
+        }
+        // Put all dependencies together
+        indirectDependencies.forEach((file, set) -> set.addAll(directDependencies.get(file)));
+
+
         // For each file put one Output object to your result map.
         Map<String, Output> output = new HashMap<>(files.size());
         for (File file : files) {
-            output.put(file.getName(), new Output(analyseSLOC(file), null));
+            output.put(file.getName(), new Output(analyseSLOC(file),
+                    indirectDependencies.get(file).stream().toList()));
         }
 
         // You can extend the Output object using the functions lineNumberBonus(int), if you did
@@ -29,8 +76,10 @@ public class SourceCodeAnalyser {
         return output;
     }
 
+
     /**
      * 1. Analyze the number of source lines
+     *
      * @param file File to analyse
      * @return Line number of the given file
      */
@@ -57,6 +106,65 @@ public class SourceCodeAnalyser {
         } else {
             // The given Output type does not consider the case of "No analyse possible".
             return -42;
+        }
+    }
+
+    /**
+     * 2. Analyze the project dependencies
+     *
+     * @param fileImports Import of a File which dependencies are of interest
+     * @param packages List of package names
+     * @return {@code packages} filtered that only the one remains on which {@code file} directly depends on
+     */
+    private static Set<String> analyseDirectDependencies(List<String> fileImports, List<String> packages) {
+            Set<String> dependencies = new HashSet<>(packages.size());
+            for (String fileImport : fileImports) {
+                for (String pkg : packages) {
+                    if (!dependencies.contains(pkg) && fileImport.startsWith(pkg)) {
+                        dependencies.add(pkg);
+                    }
+                }
+                // All packages already a dependency?
+                if (dependencies.size() == packages.size()) {
+                    break;
+                }
+            }
+            return dependencies;
+    }
+
+    private static void addDependenciesToDependents(File file, Map<File, Set<String>> indirectDependencies,
+            Map<File, Set<String>> directDependencies, Map<File, List<File>> dependents) {
+        for (File dependent : dependents.get(file)) {
+            indirectDependencies.get(dependent).addAll(directDependencies.get(file));
+            addDependenciesToDependents(dependent, indirectDependencies, directDependencies, dependents);
+        }
+    }
+    /**
+     * Reads the imports from a Java file
+     *
+     * @param file to consider
+     * @return All imported classes in this file
+     */
+    private static List<String> getFileImports(File file) {
+        if (file.canRead()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                List<String> imports = new LinkedList<>();
+                Pattern importRegEx = Pattern.compile("^ *import ([a-zA-Z_.]+); *$");
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    Matcher matcher = importRegEx.matcher(line);
+                    if (matcher.find()) {
+                        imports.add(matcher.group(1));
+                    }
+                }
+                return imports;
+            } catch (IOException e) {
+                // The given Output type does not consider the case of "No analyse possible".
+                return Collections.emptyList();
+            }
+        } else {
+            // The given Output type does not consider the case of "No analyse possible".
+            return Collections.emptyList();
         }
     }
 
