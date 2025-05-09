@@ -4,6 +4,7 @@ import org.apache.commons.cli.*;
 
 import java.io.*;
 import java.util.*;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -66,42 +67,68 @@ public class SourceCodeAnalyser {
         // For each file put one Output object to your result map.
         Map<String, Output> output = new HashMap<>(files.size());
         for (File file : files) {
-            output.put(file.getName(), new Output(analyseSLOC(file),
+            output.put(file.getName(), new Output(analyseSLOC(file, false),
                     indirectDependencies.get(file).stream().toList()));
+            // You can extend the Output object using the functions lineNumberBonus(int), if you did
+            // the bonus exercise.
+            output.get(file.getName()).lineNumberBonus(analyseSLOC(file, true));
         }
-
-        // You can extend the Output object using the functions lineNumberBonus(int), if you did
-        // the bonus exercise.
-
         return output;
     }
 
 
     /**
-     * 1. Analyze the number of source lines
+     * 1. Analyze the number of source lines <br>
+     * OR <br>
+     * 3. BONUS: Analyze the number of source lines excluding getters and block comments
      *
      * @param file File to analyse
+     * @param enhanced If True, further excluding of lines for the task 3
+     *                 otherwise counting of task 1.
      * @return Line number of the given file
      */
-    private static int analyseSLOC(File file) {
+    private static int analyseSLOC(File file, boolean enhanced) {
         if (file.canRead()) {
             int lineNumber = 0;
             boolean insideMultilineString = false;
             boolean multilineStringFirstLine = false;
-            // Does a multiline string start? (Not inside a single line comment!)
-            Pattern multilineStringStart = Pattern.compile("^((?!//).)*\"\"\".*$");
+            // Does a multiline string start? (Not inside a single line comment or start of block comment!)
+            Pattern multilineStringStart = Pattern.compile("^((?!/[/*]).)*\"\"\".*$");
             // Does a multiline string end? (Cannot be inside a single line comment)
             Pattern multilineStringEnd = Pattern.compile("^.*\"\"\".*$");
+
+            boolean insideBlockComment = false;
+            // Does a block comment start? (And no line comment i.e., //* or // ... /*)
+            Pattern blockCommentStart = Pattern.compile("^(((?!//).)*[^/]|)(?<comment>/\\*).*$");
+            // Does a block commend end? (Cannot be inside a single line comment)
+            Pattern blockCommentEnd = Pattern.compile("^.*(?<comment>\\*/).*$");
+
             try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     line = line.trim();
-                    if (!insideMultilineString && multilineStringStart.matcher(line).matches()) {
-                        insideMultilineString = true;
-                        multilineStringFirstLine = true;
+                    MatchResult blockCommentStartMatch = null;
+                    if (!insideMultilineString && !insideBlockComment) {
+                        // Check for multiline string first, as it consider not to be in a block comment
+                        if (multilineStringStart.matcher(line).matches()) {
+                            insideMultilineString = true;
+                            multilineStringFirstLine = true;
+                        } else if (enhanced) {
+                            Matcher blockCommentStartMatcher = blockCommentStart.matcher(line);
+                            if (blockCommentStartMatcher.matches()) {
+                                blockCommentStartMatch = blockCommentStartMatcher.toMatchResult();
+                                insideBlockComment = true;
+                                if (blockCommentStartMatch.start("comment") != 0) {
+                                    // block comment starts after a source code line --> count this line
+                                    ++lineNumber;
+
+                                }
+                            }
+                        }
                     }
-                    // "lines containing comments" --> Line which is only a comment
-                    if (!line.isEmpty() && !(line.startsWith("//") && !insideMultilineString)) {
+                    if (!insideBlockComment && !line.isEmpty()
+                            // "lines containing comments" --> Line which is only a comment
+                            && !(line.startsWith("//") && !insideMultilineString)) {
                         ++lineNumber;
                     }
                     if (insideMultilineString && !multilineStringFirstLine
@@ -110,6 +137,22 @@ public class SourceCodeAnalyser {
                     }
                     if (multilineStringFirstLine) {
                         multilineStringFirstLine = false;
+                    }
+                    if (insideBlockComment) {
+                        Matcher blockCommentEndMatcher = blockCommentEnd.matcher(line);
+                        if (blockCommentEndMatcher.matches()) {
+                            MatchResult blockCommentEndMatch = blockCommentEndMatcher.toMatchResult();
+                            /*/ A block comment does not end if it shares its * with the start comment,
+                                but a / before the end comment in general is okay, see here: /*/
+                            if (!(blockCommentStartMatch != null && blockCommentStartMatch.end("comment")
+                                    == blockCommentEndMatch.start("comment"))) {
+                                insideBlockComment = false;
+                                if (blockCommentEndMatch.end("comment") == line.length() - 1) {
+                                    /*/ block comment before source code line --> count this line /*/
+                                    ++lineNumber;
+                                }
+                            }
+                        }
                     }
                 }
             } catch (FileNotFoundException e) {
