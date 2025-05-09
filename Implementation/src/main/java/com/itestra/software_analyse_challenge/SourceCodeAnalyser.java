@@ -86,13 +86,30 @@ public class SourceCodeAnalyser {
     private static int analyseSLOC(File file) {
         if (file.canRead()) {
             int lineNumber = 0;
+            boolean insideMultilineString = false;
+            boolean multilineStringFirstLine = false;
+            // Does a multiline string start? (Not inside a single line comment!)
+            Pattern multilineStringStart = Pattern.compile("^((?!//).)*\"\"\".*$");
+            // Does a multiline string end? (Cannot be inside a single line comment)
+            Pattern multilineStringEnd = Pattern.compile("^.*\"\"\".*$");
             try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     line = line.trim();
+                    if (!insideMultilineString && multilineStringStart.matcher(line).matches()) {
+                        insideMultilineString = true;
+                        multilineStringFirstLine = true;
+                    }
                     // "lines containing comments" --> Line which is only a comment
-                    if (!line.isEmpty() && !line.startsWith("//")) {
+                    if (!line.isEmpty() && !(line.startsWith("//") && !insideMultilineString)) {
                         ++lineNumber;
+                    }
+                    if (insideMultilineString && !multilineStringFirstLine
+                            && multilineStringEnd.matcher(line).matches()) {
+                        insideMultilineString = false;
+                    }
+                    if (multilineStringFirstLine) {
+                        multilineStringFirstLine = false;
                     }
                 }
             } catch (FileNotFoundException e) {
