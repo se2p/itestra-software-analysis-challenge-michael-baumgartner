@@ -104,6 +104,13 @@ public class SourceCodeAnalyser {
             // Does a block commend end? (Cannot be inside a single line comment)
             Pattern blockCommentEnd = Pattern.compile("^.*(?<comment>\\*/).*$");
 
+            Pattern[] getterLines = {
+                    Pattern.compile("^public .* get.*\\(\\) *\\{$"),
+                    Pattern.compile("^return *(this\\.)?.*;$"),
+                    Pattern.compile("^}$")
+            };
+            int expectedGetterLine = 0;
+
             try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
@@ -127,10 +134,24 @@ public class SourceCodeAnalyser {
                             }
                         }
                     }
-                    if (!insideBlockComment && !line.isEmpty()
-                            // "lines containing comments" --> Line which is only a comment
-                            && !(line.startsWith("//") && !insideMultilineString)) {
-                        ++lineNumber;
+                    if (!insideBlockComment) {
+                        if (!line.isEmpty()
+                                // "lines containing comments" --> Line which is only a comment
+                                && !(line.startsWith("//") && !insideMultilineString)) {
+                            ++lineNumber;
+                        }
+                        if (!insideMultilineString) {
+                            if (getterLines[expectedGetterLine].matcher(line).matches()) {
+                                ++expectedGetterLine;
+                                if (expectedGetterLine == getterLines.length) {
+                                    // getter method was found --> 3 lines were counted too much
+                                    lineNumber -= 3;
+                                    expectedGetterLine = 0;
+                                }
+                            } else {
+                                expectedGetterLine = 0;
+                            }
+                        }
                     }
                     if (insideMultilineString && !multilineStringFirstLine
                             && multilineStringEnd.matcher(line).matches()) {
