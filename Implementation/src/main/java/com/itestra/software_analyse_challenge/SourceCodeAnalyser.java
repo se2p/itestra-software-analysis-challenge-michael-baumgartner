@@ -93,7 +93,8 @@ public class SourceCodeAnalyser {
             boolean insideMultilineString = false;
             boolean multilineStringFirstLine = false;
             // Does a multiline string start? (Not inside a single line comment or start of block comment!)
-            Pattern multilineStringStart = Pattern.compile("^((?!/[/*]).)*\"\"\".*$");
+            Pattern multilineStringStart = Pattern.compile(
+                    enhanced ? "^((?!/[/*]).)*\"\"\".*$" : "^((?!//).)*\"\"\".*$");
             // Does a multiline string end? (Cannot be inside a single line comment)
             Pattern multilineStringEnd = Pattern.compile("^.*\"\"\".*$");
 
