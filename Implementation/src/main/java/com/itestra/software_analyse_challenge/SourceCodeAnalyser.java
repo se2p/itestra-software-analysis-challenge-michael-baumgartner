@@ -115,63 +115,64 @@ public class SourceCodeAnalyser {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     line = line.trim();
-                    MatchResult blockCommentStartMatch = null;
-                    if (!insideMultilineString && !insideBlockComment) {
-                        // Check for multiline string first, as it consider not to be in a block comment
-                        if (multilineStringStart.matcher(line).matches()) {
-                            insideMultilineString = true;
-                            multilineStringFirstLine = true;
-                        } else if (enhanced) {
-                            Matcher blockCommentStartMatcher = blockCommentStart.matcher(line);
-                            if (blockCommentStartMatcher.matches()) {
-                                blockCommentStartMatch = blockCommentStartMatcher.toMatchResult();
-                                insideBlockComment = true;
-                                if (blockCommentStartMatch.start("comment") != 0) {
-                                    // block comment starts after a source code line --> count this line
-                                    ++lineNumber;
+                    if (!line.isEmpty()) {
+                        MatchResult blockCommentStartMatch = null;
+                        if (!insideMultilineString && !insideBlockComment) {
+                            // Check for multiline string first, as it consider not to be in a block comment
+                            if (multilineStringStart.matcher(line).matches()) {
+                                insideMultilineString = true;
+                                multilineStringFirstLine = true;
+                            } else if (enhanced) {
+                                Matcher blockCommentStartMatcher = blockCommentStart.matcher(line);
+                                if (blockCommentStartMatcher.matches()) {
+                                    blockCommentStartMatch = blockCommentStartMatcher.toMatchResult();
+                                    insideBlockComment = true;
+                                    if (blockCommentStartMatch.start("comment") != 0) {
+                                        // block comment starts after a source code line --> count this line
+                                        ++lineNumber;
 
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (!insideBlockComment) {
-                        if (!line.isEmpty()
-                                // "lines containing comments" --> Line which is only a comment
-                                && !(line.startsWith("//") && !insideMultilineString)) {
-                            ++lineNumber;
-                        }
-                        if (!insideMultilineString) {
-                            if (getterLines[expectedGetterLine].matcher(line).matches()) {
-                                ++expectedGetterLine;
-                                if (expectedGetterLine == getterLines.length) {
-                                    // getter method was found --> 3 lines were counted too much
-                                    lineNumber -= 3;
+                        if (!insideBlockComment) {
+                            // "lines containing comments" --> Line which is only a comment
+                            if (!(line.startsWith("//") && !insideMultilineString)) {
+                                ++lineNumber;
+                            }
+                            if (!insideMultilineString) {
+                                if (getterLines[expectedGetterLine].matcher(line).matches()) {
+                                    ++expectedGetterLine;
+                                    if (expectedGetterLine == getterLines.length) {
+                                        // getter method was found --> 3 lines were counted too much
+                                        lineNumber -= 3;
+                                        expectedGetterLine = 0;
+                                    }
+                                } else {
                                     expectedGetterLine = 0;
                                 }
-                            } else {
-                                expectedGetterLine = 0;
                             }
                         }
-                    }
-                    if (insideMultilineString && !multilineStringFirstLine
-                            && multilineStringEnd.matcher(line).matches()) {
-                        insideMultilineString = false;
-                    }
-                    if (multilineStringFirstLine) {
-                        multilineStringFirstLine = false;
-                    }
-                    if (insideBlockComment) {
-                        Matcher blockCommentEndMatcher = blockCommentEnd.matcher(line);
-                        if (blockCommentEndMatcher.matches()) {
-                            MatchResult blockCommentEndMatch = blockCommentEndMatcher.toMatchResult();
+                        if (insideMultilineString && !multilineStringFirstLine
+                                && multilineStringEnd.matcher(line).matches()) {
+                            insideMultilineString = false;
+                        }
+                        if (multilineStringFirstLine) {
+                            multilineStringFirstLine = false;
+                        }
+                        if (insideBlockComment) {
+                            Matcher blockCommentEndMatcher = blockCommentEnd.matcher(line);
+                            if (blockCommentEndMatcher.matches()) {
+                                MatchResult blockCommentEndMatch = blockCommentEndMatcher.toMatchResult();
                             /*/ A block comment does not end if it shares its * with the start comment,
                                 but a / before the end comment in general is okay, see here: /*/
-                            if (!(blockCommentStartMatch != null && blockCommentStartMatch.end("comment")
-                                    == blockCommentEndMatch.start("comment"))) {
-                                insideBlockComment = false;
-                                if (blockCommentEndMatch.end("comment") == line.length() - 1) {
-                                    /*/ block comment before source code line --> count this line /*/
-                                    ++lineNumber;
+                                if (!(blockCommentStartMatch != null && blockCommentStartMatch.end("comment")
+                                        == blockCommentEndMatch.start("comment"))) {
+                                    insideBlockComment = false;
+                                    if (blockCommentEndMatch.end("comment") == line.length() - 1) {
+                                        /*/ block comment before source code line --> count this line /*/
+                                        ++lineNumber;
+                                    }
                                 }
                             }
                         }
